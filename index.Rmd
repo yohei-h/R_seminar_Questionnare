@@ -1,0 +1,10 @@
+---
+site: bookdown::bookdown_site
+output: 
+  bookdown::gitbook:
+    split_by: rmd
+    pandoc_args: [
+          "--from", "markdown+autolink_bare_uris+tex_math_single_backslash-implicit_figures"
+        ]
+---
+

@@ -1,0 +1,205 @@
+---
+title: "Untitled"
+author: "Yohei"
+date: "1/26/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(magrittr)
+library(scales)
+library(gridExtra)
+library(rlang)
+library(egg)
+
+
+# 2つに分かれてしまったアンケート回答csv
+d1 <- read_csv('../data/Questionnare_Answer1_20200125.csv')
+d2 <- read_csv('../data/Questionnare_Answer2_20200125.csv')
+
+```
+
+
+```{r, include=F}
+# 2つにわかれてしまったアンケート回答の結合
+df_1 <- d1 %>% 
+    mutate(タイムスタンプ = ymd_hms(タイムスタンプ)) %>% 
+    filter(タイムスタンプ >= ymd(20200101)) %>% 
+    select(-タイムスタンプ)  %>% 
+    mutate_at(vars(5:6), ~ case_when(. %in% c('とてもわかりやすい', 'とても満足', 'とても速い')   ~ 5,
+                       . %in% c('わかりやすい', 'やや満足', '速い') ~ 4,
+                       . %in% c('どちらともいえない', 'ちょうどよい') ~ 3,
+                       . %in% c('わかりにくい', 'やや不満', '遅い') ~ 2,
+                       . %in% c('とてもわかりにくい', 'とても不満', 'とても遅い') ~ 1))
+
+
+df_2 <- d2 %>% 
+    select(-タイムスタンプ) %>% 
+    mutate_at(vars(5:16), ~ case_when(. %in% c('とてもわかりやすい', 'とても満足', 'とても速い')   ~ 5,
+                           . %in% c('わかりやすい', 'やや満足', '速い') ~ 4,
+                           . %in% c('どちらともいえない', 'ちょうどよい') ~ 3,
+                           . %in% c('わかりにくい', 'やや不満', '遅い') ~ 2,
+                           . %in% c('とてもわかりにくい', 'とても不満'
+                                    , 'とても遅い') ~ 1))
+# 以下、factorをいじる必要あり
+# 回答者のいないfactorのlevelsは生csvに反映されていないので自分で追加する必要あり (1. fct_expand)
+# ラベル名が長いものはx軸で文字が重なって見づらいので、省略形にする (2. fct_recode)
+# 1~5の数値に関しては並び順を1,2,3,4,5に揃える (3-1. fct_relevel)
+# それ以外の選択アンケートに関しては、頻度順に並べる (3-2. fct_infreq)
+# もしくはわかいやすい順にする (3-3. fct_relevel)
+# 足りないlevelsをまず1. fct_expandで補って、2. 長いlevel名は省略形にして, 最後にfct_infreq(), fct_relevel()で順番を調整するという流れ。
+df_bind <- bind_rows(df_1, df_2) %>% 
+    mutate_at(c(1:16), ~ as.factor(.)) %>% 
+    mutate(`よろしければご所属 (ご職業) をお知らせください。` = 
+               `よろしければご所属 (ご職業) をお知らせください。` %>% 
+               fct_expand('医療・介護従事者', '大学関係者', '各種研究機関に所属する研究者',
+                          '企業に所属する者', '医療政策担当者') %>% 
+               fct_recode('医療・介護' = '医療・介護従事者',
+                          '大学' = '大学関係者',
+                          '研究機関' =  '各種研究機関に所属する研究者',
+                          '企業' = '企業に所属する者',
+                          '医療政策' = '医療政策担当者') %>% 
+               fct_infreq(),
+           `学会発表や論文作成で、最も使用している統計ソフトは何ですか？` = 
+               `学会発表や論文作成で、最も使用している統計ソフトは何ですか？` %>% 
+               fct_expand('R', 'Excel', 'JMP', 'Stata', 'SAS', 'SPSS', 'Python', 'EZR') %>% 
+               fct_infreq(),
+           `R使用経験について教えて下さい。` =
+               `R使用経験について教えて下さい。` %>% 
+               fct_expand('全くない',
+                          'Rの講習会・勉強会を受講したことがあるが、結局使っていない',
+                          'P値は求めたことがあるが、メインのソフトではない',
+                          '学会発表・論文作成でよく使用している') %>% 
+               fct_recode('全くない' =
+                              '全くない',
+                          'Rの講習会\n勉強会を受\n講したことがある\nが、結局使って\nいない'=
+                              'Rの講習会・勉強会を受講したことがあるが、結局使っていない' ,
+                          'P値は求めた\nことがあるが、\nメインのソnトではない' =
+                              'P値は求めたことがあるが、メインのソフトではない',
+                          '学会発表・論文\n作成でよく使nしている'=
+                              '学会発表・論文作成でよく使用している') %>%
+               fct_relevel('全くない',
+                           'R講習会の受講\n経験ありだが、\n結局使ってnない',
+                           'P値を求めたこ\nとがある',
+                           '学会・論文で\n使用している'
+                           ),
+           `全体を通して難易度はいかがでしたか？` =
+               `全体を通して難易度はいかがでしたか？` %>% 
+               fct_expand('とてもわかりやすい',
+                          'わかりやすい',
+                          'どちらともいえない',
+                          'わかりにくい', 
+                          'とてもわかりにくい') %>% 
+               fct_relevel('とてもわかりやすい',
+                          'わかりやすい',
+                          'どちらともいえない',
+                          'わかりにくい', 
+                          'とてもわかりにくい') %>% 
+               fct_rev()
+) %>% 
+    mutate_at(5:16, ~ fct_expand(. , '1', '2', '3', '4', '5') %>% 
+                  fct_relevel('1', '2', '3', '4', '5')) 
+
+
+# write.csv(df_bind, file = 'Rseminar_questionnare_bind.csv', row.names = F)  → これをR講師みなさんへ配布
+
+str_wrap('Rの講習会・勉強会を受講したことがあるが、結局使っていない', 4)
+ dd <- df_bind$`R使用経験について教えて下さい。` %>% 
+               fct_expand('全くない',
+                          str_wrap('Rの講習会・勉強会を受講したことがあるが、結局使っていない',4),
+                          'P値は求めたことがあるが、メインのソフトではない',
+                          '学会発表・論文作成でよく使用している') 
+ dd %>% levels()
+
+```
+
+
+```{r, include=F}
+# グラフを出力する関数⇣
+cvd_palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+make_colgraph <- function(x) {
+    x_str <- paste0('`', x, '`')
+    x <- parse_expr(x_str)
+    df_col <- df_bind %>% 
+        select(!!x) %>% 
+        group_by_all() %>% 
+        summarise(n = n()) %>% 
+        ungroup() %>% 
+        mutate(pct = (n/ sum(n) * 100) %>% round(0))
+    g <- ggplot(df_col, aes(x = !!x, y = n)) +
+            geom_col(fill = 'white', colour = 'black') +
+            theme_gray(base_family = 'HiraKakuProN-W3') +
+            scale_x_discrete(drop = F) +
+            scale_y_continuous(breaks = 0:20)+
+            geom_text(aes(label = paste0(pct, '%')), vjust = -0.1) +
+            labs(x = str_wrap(x_str, width = 30))
+    return(g)
+}
+
+# make_colgraph("よろしければご所属 (ご職業) をお知らせください。")
+```
+
+
+
+
+# 結果1
+```{r, echo =F, fig.height=16}
+print(paste0('アンケート回答者人数: ', nrow(df_bind)))
+print(paste0('アンケート回収割合: ', 100 * nrow(df_bind) / 25, '%' ))
+col_names <- colnames(df_bind)
+
+# 4行、1列のグラフにする
+g_list_1 <- map(col_names[1:4], make_colgraph)
+
+ggarrange(plots = g_list_1, ncol = 1)  # グラフ全体はfig.height=16 inch→ 1つのグラフは16/4 = 4 inchの高さ
+```
+
+```{r, echo = F, fig.height=24}
+# 6行、2列のグラフにする
+g_list_2 <- map(col_names[5:16], make_colgraph)
+ggarrange(plots = g_list_2, ncol = 2) # グラフ全体はfig.height=24 inch→ 1つのグラフは24/6 = 4 inchの高さ
+```
+
+
+# 結果2
+## `r col_names[17]`
+```{r, echo=F}
+df_bind %>% 
+    extract2(17)
+```
+
+## `r col_names[18]`
+```{r, echo=F}
+df_bind %>% 
+    extract2(18)
+```
+
+## `r col_names[19]`
+```{r, echo=F}
+df_bind %>% 
+    extract2(19)
+```
+
+## `r col_names[20]`
+```{r, echo=F}
+df_bind %>% 
+    extract2(20)
+```
+
+
+<!-- # ```{r, include =F} -->
+<!-- # # geom_bar()＝積み上げバージョン -->
+<!-- # make_bargraph <- function(x) { -->
+<!-- #     x <- paste0('`', x, '`') -->
+<!-- #     x <- parse_expr(x) -->
+<!-- #     ggplot(df_bind, aes(x = '')) + -->
+<!-- #         geom_bar(aes(fill = !!x)) + -->
+<!-- #         theme_gray(base_family = "HiraKakuProN-W3") + -->
+<!-- #         scale_y_continuous(labels = percent) + -->
+<!-- #         scale_fill_manual(values = cvd_palette) + -->
+<!-- #         labs(x = '', y = '%') -->
+<!-- # } -->
+<!-- # ``` -->
